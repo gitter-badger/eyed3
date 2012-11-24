@@ -398,41 +398,72 @@ class Tag(core.Tag):
 
     @property
     def best_release_date(self):
-        return (self.release_date or
-                self.recording_date or
-                self.original_release_date)
+        '''This method tries its best to return a date of some sort, amongst
+        alll the possible date frames. The order of preference for a release
+        date is 1) date of original release 2) date of this versions release
+        3) the recording date. Or None is returned.'''
+        return (self.original_release_date or
+                self.release_date or
+                self.recording_date)
 
     def _getReleaseDate(self):
-        return self._getDate("TDRL")
+        return self._getDate("TDRL") if self.version == ID3_V2_4\
+                                     else self._getV23OrignalReleaseDate()
     def _setReleaseDate(self, date):
-        self._setDate("TDRL", date)
+        self._setDate("TDRL" if self.version == ID3_V2_4 else "TORY", date)
+
     release_date = property(_getReleaseDate, _setReleaseDate)
+    '''The date the audio was released. This is NOT the original date the
+    work was released, instead it is more like the pressing or version of the
+    release. Original release date is usually what is intended but many programs
+    use this frame and/or don't distinguish between the two.'''
 
     def _getOrigReleaseDate(self):
-        return self._getDate("TDOR") or self._v23OrignalReleaseDate()
+        return self._getDate("TDOR") or self._getV23OrignalReleaseDate()
     def _setOrigReleaseDate(self, date):
         self._setDate("TDOR", date)
+
     original_release_date = property(_getOrigReleaseDate, _setOrigReleaseDate)
+    '''The date the work was originally released.'''
 
     def _getRecordingDate(self):
-        return self._getDate("TDRC") or self._v23RecordingDate()
+        return self._getDate("TDRC") or self._getV23RecordingDate()
     def _setRecordingDate(self, date):
-        self._setDate("TDRC", date)
-    recording_date = property(_getRecordingDate, _setRecordingDate)
+        if self.version == ID3_V2_4:
+            self._setDate("TDRC", date)
+        elif date:
+            self._setDate("TYER", unicode(date.year))
+            if None not in (date.month, date.day):
+                date_str = u"%s%s" % (str(date.day).rjust(2, "0"),
+                                      str(date.month).rjust(2, "0"))
+                self._setDate("TDAT", date_str)
+            if None not in (date.hour, date.minute):
+                date_str = u"%s%s" % (str(date.hour).rjust(2, "0"),
+                                      str(date.minute).rjust(2, "0"))
+                self._setDate("TIME", date_str)
+        else:
+            self._setDate("TYER", None)
+            self._setDate("TDAT", None)
+            self._setDate("TIME", None)
 
-    def _v23RecordingDate(self):
+    recording_date = property(_getRecordingDate, _setRecordingDate)
+    '''The date of the recording. Many applications use this for release date
+    regardless of the fact that this value is rarely known, and release dates
+    are more correct.'''
+
+    def _getV23RecordingDate(self):
         # v2.3 TYER (yyyy), TDAT (DDMM), TIME (HHmm)
         date = None
         try:
             date_str = ""
-            if self.frame_set["TYER"]:
+            if "TYER" in self.frame_set:
                 date_str = self.frame_set["TYER"][0].text.encode("latin1")
                 date = core.Date.parse(date_str)
-            if self.frame_set["TDAT"]:
+            if "TDAT" in self.frame_set:
                 text = self.frame_set["TDAT"][0].text.encode("latin1")
                 date_str += "-%s-%s" % (text[2:], text[:2])
                 date = core.Date.parse(date_str)
-            if self.frame_set["TIME"]:
+            if "TIME" in self.frame_set:
                 text = self.frame_set["TIME"][0].text.encode("latin1")
                 date_str += "T%s:%s" % (text[:2], text[2:])
                 date = core.Date.parse(date_str)
@@ -441,16 +472,18 @@ class Tag(core.Tag):
 
         return date
 
-    def _v23OrignalReleaseDate(self):
-        # v2.3 TORY (yyyy)
-        date = None
+    def _getV23OrignalReleaseDate(self):
+        date, date_str = None, None
         try:
-            if self.frame_set["TORY"]:
-                # YYYY
-                date_str = self.frame_set["TORY"][0].text.encode("latin1")
+            for fid in ("XDOR", "TORY"):
+                # Prefering XDOR over TORY since it can contain full date.
+                if fid in self.frame_set:
+                    date_str = self.frame_set[fid][0].text.encode("latin1")
+                    break
+            if date_str:
                 date = core.Date.parse(date_str)
         except ValueError as ex:
-            log.warning("Invalid v2.3 TORY frame: %s" % ex)
+            log.warning("Invalid v2.3 TORY/XDOR frame: %s" % ex)
 
         return date
 
@@ -461,35 +494,47 @@ class Tag(core.Tag):
     tagging_date = property(_getTaggingDate, _setTaggingDate)
 
     def _setDate(self, fid, date):
-        assert(fid in frames.DATE_FIDS)
+        assert(fid in frames.DATE_FIDS or
+                fid in frames.DEPRECATED_DATE_FIDS)
 
         if date is None:
             try:
                 del self.frame_set[fid]
             except KeyError:
                 pass
-            finally:
-                return
+            return
 
-        # Convert to ISO format which is what FrameSet wants.
-        date_type = type(date)
-        if date_type is int:
-            # The integer year
-            date = core.Date(date)
-        elif date_type in types.StringTypes:
-            date = core.Date.parse(date)
-        elif not isinstance(date, core.Date):
-            raise TypeError("Invalid type: %s" % str(type(date)))
+        # Special casing the conversion to DATE objects cuz TDAT and TIME won't
+        if fid not in ("TDAT", "TIME"):
+            # Convert to ISO format which is what FrameSet wants.
+            date_type = type(date)
+            if date_type is int:
+                # The integer year
+                date = core.Date(date)
+            elif date_type in types.StringTypes:
+                date = core.Date.parse(date)
+            elif not isinstance(date, core.Date):
+                raise TypeError("Invalid type: %s" % str(type(date)))
 
         date_text = unicode(str(date))
         if fid in self.frame_set:
             self.frame_set[fid][0].date = date
         else:
-            self.frame_set[fid] = frames.DateFrame(fid, date=date_text)
+            self.frame_set[fid] = frames.DateFrame(fid, date_text)
 
     def _getDate(self, fid):
+        if fid in ("TORY", "XDOR"):
+            return self._getV23OrignalReleaseDate()
+
         if fid in self.frame_set:
-            return self.frame_set[fid][0].date
+            if fid in ("TYER", "TDAT", "TIME"):
+                if fid == "TYER":
+                    # Contain years only, date conversion can happen
+                    return core.Date(int(self.frame_set[fid][0].text))
+                else:
+                    return self.frame_set[fid][0].text
+            else:
+                return self.frame_set[fid][0].date
         else:
             return None
 
@@ -727,35 +772,36 @@ class Tag(core.Tag):
 
     def _render(self, version, curr_tag_size):
         std_frames = []
-        converted_frames = []
+        non_std_frames = []
         for f in self.frame_set.getAllFrames():
             try:
                 _, fversion, _ = frames.ID3_FRAMES[f.id]
                 if fversion in (version, ID3_V2):
                     std_frames.append(f)
                 else:
-                    converted_frames.append(f)
+                    non_std_frames.append(f)
             except KeyError:
                 # Not a standard frame (ID3_FRAMES)
                 try:
                     _, fversion, _ = frames.NONSTANDARD_ID3_FRAMES[f.id]
-                    # but it is one we can handle.
+                    # but is it one we can handle.
                     if fversion in (version, ID3_V2):
                         std_frames.append(f)
                     else:
-                        converted_frames.append(f)
+                        non_std_frames.append(f)
                 except KeyError:
                     # Don't know anything about this pass it on for the error
                     # check there.
-                    converted_frames.append(f)
+                    non_std_frames.append(f)
 
-        if converted_frames:
+        if non_std_frames:
             # actually, they're not converted yet
-            converted_frames = self._convertFrames(converted_frames, version)
+            non_std_frames = self._convertFrames(std_frames, non_std_frames,
+                                                 version)
 
         # Render all frames first so the data size is known for the tag header.
         frame_data = b""
-        for f in std_frames + converted_frames:
+        for f in std_frames + non_std_frames:
             frame_header = frames.FrameHeader(f.id, version)
             if f.header:
                 frame_header.copyFlags(f.header)
@@ -876,13 +922,17 @@ class Tag(core.Tag):
         log.debug("Tag write complete. Updating FileInfo state.")
         self.file_info.tag_size = len(tag_data) + len(padding)
 
-    def _convertFrames(self, flist, version):
-        '''Maps frame imcompatibilies between ID3 v2.3 and v2.4'''
+    def _convertFrames(self, std_frames, convert_list, version):
+        '''Maps frame imcompatibilies between ID3 v2.3 and v2.4.
+        The items in ``std_frames`` need no conversion, but the list/frames
+        may be edited if necessary (e.g. a converted frame replaces a frame
+        in the list).  The items in ``convert_list`` are the frames to convert
+        and return. The ``version`` is the target ID3 version.'''
         from . import versionToString
         from .frames import (DATE_FIDS, DEPRECATED_DATE_FIDS,
                              DateFrame, TextFrame)
         converted_frames = []
-        flist = list(flist)
+        flist = list(convert_list)
 
         # Date frame conversions.
         date_frames = {f.id: f for f in flist if f.id in DEPRECATED_DATE_FIDS}\
@@ -890,31 +940,27 @@ class Tag(core.Tag):
                       {f.id: f for f in flist if f.id in DATE_FIDS}
         if date_frames:
             if version == ID3_V2_4:
-                if "TORY" in date_frames:
+                if "TORY" in date_frames or "XDOR" in date_frames:
+                    # XDOR -> TDOR (full date)
                     # TORY -> TDOR (year only)
-                    date = self._v23OrignalReleaseDate()
+                    date = self._getV23OrignalReleaseDate()
                     if date:
                         converted_frames.append(DateFrame("TDOR", date))
-                    flist.remove(date_frames["TORY"])
-                    del date_frames["TORY"]
+                    for fid in ("TORY", "XDOR"):
+                        if fid in flist:
+                            flist.remove(date_frames[fid])
+                            del date_frames[fid]
 
-                if "TYER" in date_frames:
-                    # TYER, TDAT, TIME -> TDRC
-                    date = self._v23RecordingDate()
+                # TYER, TDAT, TIME -> TDRC
+                if ("TYER" in date_frames or "TDAT" in date_frames or
+                        "TIME" in date_frames):
+                    date = self._getV23RecordingDate()
                     if date:
                         converted_frames.append(DateFrame("TDRC", date))
                     for fid in ["TYER", "TDAT", "TIME"]:
                         if fid in date_frames:
                             flist.remove(date_frames[fid])
                             del date_frames[fid]
-
-                if "XDOR" in date_frames:
-                    # XDOR -> TDRC
-                    xdor = date_frames["XDOR"]
-                    converted_frames.append(DateFrame("TDRC", xdor.text))
-
-                    flist.remove(xdor)
-                    del date_frames["XDOR"]
 
             elif version == ID3_V2_3:
                 if "TDOR" in date_frames:
@@ -925,8 +971,8 @@ class Tag(core.Tag):
                     flist.remove(date_frames["TDOR"])
                     del date_frames["TDOR"]
 
-                if "TDRL" in date_frames:
-                    date = date_frames["TDRL"].date
+                if "TDRC" in date_frames:
+                    date = date_frames["TDRC"].date
 
                     if date:
                         converted_frames.append(DateFrame("TYER",
@@ -942,22 +988,21 @@ class Tag(core.Tag):
                                      str(date.minute).rjust(2, "0"))
                             converted_frames.append(TextFrame("TIME", date_str))
 
-                    flist.remove(date_frames["TDRL"])
-                    del date_frames["TDRL"]
-
-                if "TDRC" in date_frames:
-                    # TDRC -> XDOR
-                    date = date_frames["TDRC"].date
-                    if date:
-                        converted_frames.append(DateFrame("XDOR", str(date)))
                     flist.remove(date_frames["TDRC"])
                     del date_frames["TDRC"]
+
+                if "TDRL" in date_frames:
+                    # TDRL -> XDOR
+                    date = date_frames["TDRL"].date
+                    if date:
+                        converted_frames.append(DateFrame("XDOR", str(date)))
+                    flist.remove(date_frames["TDRL"])
+                    del date_frames["TDRL"]
 
             # All other date frames have no conversion
             for fid in date_frames:
                 log.warning("%s frame being dropped due to conversion to %s" %
                             (fid, versionToString(version)))
-
                 flist.remove(date_frames[fid])
 
         # Convert sort order frames 2.3 (XSO*) <-> 2.4 (TSO*)
@@ -970,11 +1015,19 @@ class Tag(core.Tag):
             flist.remove(frame)
             converted_frames.append(frame)
 
+        # Raise an error for frames that could not be converted.
         if len(flist) != 0:
             unconverted = ", ".join([f.id for f in flist])
             raise TagException("Unable to covert the following frames to "
                                "version %s: %s" % (versionToString(version),
                                                    unconverted))
+
+        # Some frames in converted_frames may replace/edit frames in std_frames.
+        for cframe in converted_frames:
+            for sframe in std_frames:
+                if cframe.id == sframe.id:
+                    std_frames.remove(sframe)
+
         return converted_frames
 
     @staticmethod

@@ -1232,9 +1232,8 @@ class FrameSet(dict):
 
     def parse(self, f, tag_header, extended_header):
         '''Read frames starting from the current read position of the file
-        object ``f``. Returns the amount of padding which occurs after the tag,
-        but before the audio content.
-        '''
+        object. Returns the amount of padding which occurs after the tag, but
+        before the audio content.  A return valule of 0 does not mean error.'''
         from .headers import FrameHeader
 
         self.clear()
@@ -1335,14 +1334,10 @@ class FrameSet(dict):
         assert(fid[0] == "T" and fid in list(ID3_FRAMES.keys()))
 
         if fid in self:
-            curr = self[fid][0]
-            if isinstance(curr, DateFrame):
-                curr.date = text
-            else:
-                curr.text = text
+            curr = self[fid][0].text = text
         else:
             if fid in DATE_FIDS:
-                self[fid] = DateFrame(date_str=text)
+                self[fid] = DateFrame(fid, date=text)
             else:
                 self[fid] = TextFrame(fid, text=text)
 
