@@ -85,6 +85,7 @@ class Tag(core.Tag):
         try:
             tag_found = False
             padding = 0
+            # The & is for supporting the "meta" versions, any, etc.
             if version[0] & 2:
                 tag_found, padding = self._loadV2Tag(fileobj)
 
@@ -96,6 +97,9 @@ class Tag(core.Tag):
             if tag_found and self.isV2():
                 self.file_info.tag_size = (TagHeader.SIZE +
                                            self.header.tag_size)
+            if tag_found:
+                self.file_info.tag_padding_size = padding
+
         finally:
             if close_file:
                 fileobj.close()
@@ -217,7 +221,7 @@ class Tag(core.Tag):
 
         if not txt and self.frame_set[fid]:
             del self.frame_set[fid]
-        else:
+        elif txt:
             self.frame_set.setTextFrame(fid, txt)
 
     def getTextFrame(self, fid):
@@ -1009,6 +1013,10 @@ class Tag(core.Tag):
             flist.remove(frame)
             converted_frames.append(frame)
 
+        # TSIZ (v2.3) are completely deprecated, remove them
+        if version == ID3_V2_4:
+            flist = [f for f in flist if f.id != "TSIZ"]
+
         # Raise an error for frames that could not be converted.
         if len(flist) != 0:
             unconverted = ", ".join([f.id for f in flist])
@@ -1528,7 +1536,8 @@ class TagTemplate(string.Template):
             raise ValueError('Unrecognized named group in pattern',
                              self.pattern)
 
-        return self.pattern.sub(convert, self.template)
+        name = self.pattern.sub(convert, self.template)
+        return name.replace('/', '-') if self._path_friendly else name
 
     safe_substitute = substitute
 
@@ -1541,10 +1550,11 @@ class TagTemplate(string.Template):
             return str(date)
 
     def _track(self, tag, param, zeropad):
-        tn, tt = (str(n) for n in tag.track_num)
+        tn, tt = (str(n) if n else None for n in tag.track_num)
         if zeropad:
-            tt = tt.rjust(2, "0")
-            tn = tn.rjust(len(tt), "0")
+            if tt:
+                tt = tt.rjust(2, "0")
+            tn = tn.rjust(len(tt) if tt else 2, "0")
 
         if param.endswith(":num"):
             return tn
