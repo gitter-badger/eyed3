@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 ################################################################################
-#  Copyright (C) 2012  Travis Shirk <travis@pobox.com>
+#  Copyright (C) 2013  Travis Shirk <travis@pobox.com>
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -17,28 +17,21 @@
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
 ################################################################################
-import os
-from fabric.api import run, put
-from pavement import SRC_DIST_TGZ, DOC_DIST, MD5_DIST, SRC_DIST_ZIP
+import sys
+from nose.tools import assert_true
 
-RELEASE_D = "~/www/eyeD3/releases"
+# assert functions that are not in unittest in python 2.6, and therefore not
+# import from nost.tools as in python >= 2.7
+if sys.version_info[:2] == (2, 6):
 
+    def assert_is_none(data):
+        assert_true(data is None)
 
-def deploy_sdist():
-    '''Deploy .tgz, .zip, and .md5'''
-    put("./dist/%s" % SRC_DIST_TGZ, RELEASE_D)
-    put("./dist/%s" % SRC_DIST_ZIP, RELEASE_D)
-    put("./dist/%s.md5" % os.path.splitext(SRC_DIST_TGZ)[0], RELEASE_D)
+    def assert_is_not_none(data):
+        assert_true(data is not None)
 
+    def assert_in(data, container):
+        assert_true(data in container)
 
-def deploy_docs():
-    '''Deploy docs tarball and install.'''
-    put("./dist/%s" % DOC_DIST, RELEASE_D)
-    run("tar xzf %s -C ./www/eyeD3 --strip-components=1" %
-            os.path.join(RELEASE_D, DOC_DIST))
-
-
-def deploy():
-    deploy_sdist()
-    deploy_docs()
-
+    def assert_is(data1, data2):
+        assert_true(data1 is data2)

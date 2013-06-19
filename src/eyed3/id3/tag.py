@@ -742,7 +742,8 @@ class Tag(core.Tag):
         else:
             assert(not "Version bug: %s" % str(version))
 
-        if preserve_file_time:
+        if preserve_file_time and None not in (self.file_info.atime,
+                                               self.file_info.mtime):
             os.utime(self.file_info.name,
                      (self.file_info.atime, self.file_info.mtime))
         else:
@@ -1144,8 +1145,12 @@ class FileInfo:
         self.tag_size = 0  # This includes the padding byte count.
         self.tag_padding_size = 0
 
-        s = os.stat(self.name)
-        self.atime, self.mtime = s.st_atime, s.st_mtime
+        try:
+            s = os.stat(self.name)
+        except OSError:
+            self.atime, self.mtime = None, None
+        else:
+            self.atime, self.mtime = s.st_atime, s.st_mtime
 
 
 class AccessorBase(object):
@@ -1468,12 +1473,13 @@ class ChaptersAccessor(AccessorBase):
             if chap.element_id == element_id:
                 # update
                 chap.times, chap.offsets = times, offsets
-                chap.sub_frames = sub_frames
+                if sub_frames:
+                    chap.sub_frames = sub_frames
                 return chap
 
         chap = frames.ChapterFrame(element_id=element_id,
                                    times=times, offsets=offsets,
-                                   sub_frames=sub_frames or [])
+                                   sub_frames=sub_frames)
         self._fs[frames.CHAPTER_FID] = chap
         return chap
 
@@ -1538,10 +1544,10 @@ class TocAccessor(AccessorBase):
         return toc
 
     def remove(self, element_id):
-        return super(ChaptersAccessor, self).remove(element_id)
+        return super(TocAccessor, self).remove(element_id)
 
     def get(self, element_id):
-        return super(ChaptersAccessor, self).get(element_id)
+        return super(TocAccessor, self).get(element_id)
 
     def __getitem__(self, elem_id):
         '''Overiding the index based __getitem__ for one indexed with table
