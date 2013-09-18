@@ -32,7 +32,7 @@ from . import DEFAULT_LANG
 from . import Genre
 from . import frames
 from .headers import TagHeader, ExtendedTagHeader
-from ..compat import StringTypes
+from ..compat import StringTypes, BytesType, unicode
 
 import logging
 log = logging.getLogger(__name__)
@@ -78,14 +78,15 @@ class Tag(core.Tag):
         version = version or ID3_ANY_VERSION
 
         close_file = False
-        if isinstance(fileobj, types.FileType):
+        try:
             filename = fileobj.name
-        elif type(fileobj) in StringTypes:
-            filename = fileobj
-            fileobj = file(filename, "rb")
-            close_file = True
-        else:
-            raise ValueError("Invalid type: %s" % str(type(fileobj)))
+        except AttributeError:
+            if type(fileobj) in StringTypes:
+                filename = fileobj
+                fileobj = open(filename, "rb")
+                close_file = True
+            else:
+                raise ValueError("Invalid type: %s" % str(type(fileobj)))
 
         self.file_info = FileInfo(filename)
 
@@ -388,7 +389,7 @@ class Tag(core.Tag):
 
         if self.frame_set[frames.CDID_FID]:
             cdid = self.frame_set[frames.CDID_FID][0]
-            cdid.toc = str(toc)
+            cdid.toc = BytesType(toc)
         else:
             self.frame_set[frames.CDID_FID] = \
                 frames.MusicCDIdFrame(toc=toc)
@@ -440,9 +441,12 @@ class Tag(core.Tag):
         return self._getDate("TDRC") or self._getV23RecordingDate()
 
     def _setRecordingDate(self, date):
-        if self.version == ID3_V2_4:
+        if date is None:
+            for fid in ("TDRC", "TYER", "TDAT", "TIME"):
+                self._setDate(fid, None)
+        elif self.version == ID3_V2_4:
             self._setDate("TDRC", date)
-        elif date:
+        else:
             self._setDate("TYER", unicode(date.year))
             if None not in (date.month, date.day):
                 date_str = u"%s%s" % (str(date.day).rjust(2, "0"),
@@ -452,10 +456,6 @@ class Tag(core.Tag):
                 date_str = u"%s%s" % (str(date.hour).rjust(2, "0"),
                                       str(date.minute).rjust(2, "0"))
                 self._setDate("TIME", date_str)
-        else:
-            self._setDate("TYER", None)
-            self._setDate("TDAT", None)
-            self._setDate("TIME", None)
 
     recording_date = property(_getRecordingDate, _setRecordingDate)
     '''The date of the recording. Many applications use this for release date
