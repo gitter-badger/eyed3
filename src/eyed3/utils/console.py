@@ -62,8 +62,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ################################################################################
 from __future__ import print_function
+import os
 import sys
 import time
+import types
 import struct
 from ..compat import PY2
 from .. import LOCAL_ENCODING
@@ -77,34 +79,56 @@ try:
 except ImportError:
     _CAN_RESIZE_TERMINAL = False
 
-USE_ANSI = True
-'''If set to False no ANSI codes are ever used. Otherwise, use ``enableColor``
-to toggle ANSI on a per file stream basis.'''
-
-CSI = '\033['
 
 class AnsiCodes(object):
+    _USE_ANSI = False
+    _CSI = '\033['
+
     def __init__(self, codes):
         def code_to_chars(code):
-            return CSI + str(code) + 'm'
+            return AnsiCodes._CSI + str(code) + 'm'
 
         for name in dir(codes):
             if not name.startswith('_'):
                 value = getattr(codes, name)
                 setattr(self, name, code_to_chars(value))
 
-    def __getattribute__(self, name):
-        global USE_ANSI
+                # Add color function
+                for reset_name in ("RESET_%s" % name, "RESET"):
+                    if hasattr(codes, reset_name):
+                        reset_value = getattr(codes, reset_name)
+                        setattr(self, "%s" % name.lower(),
+                                AnsiCodes._mkfunc(code_to_chars(value),
+                                                  code_to_chars(reset_value)))
+                        break
 
-        name = name.upper()
+    @staticmethod
+    def _mkfunc(color, reset):
+        def _cwrap(text):
+            return ((color if AnsiCodes._USE_ANSI else '') + text +
+                    (reset if AnsiCodes._USE_ANSI else ''))
+        return _cwrap
+
+    def __getattribute__(self, name):
         attr = super(AnsiCodes, self).__getattribute__(name)
-        if attr.startswith(CSI) and not USE_ANSI:
+        if (hasattr(attr, "startswith") and attr.startswith(AnsiCodes._CSI)
+                and not AnsiCodes._USE_ANSI):
             return ''
         else:
             return attr
 
     def __getitem__(self, name):
         return getattr(self, name.upper())
+
+    @staticmethod
+    def init(enabled):
+        if not enabled:
+            AnsiCodes._USE_ANSI = False
+        else:
+            AnsiCodes._USE_ANSI = True
+            if "TERM" in os.environ and os.environ["TERM"] == "dumb":
+                AnsiCodes._USE_ANSI = False
+
 
 class AnsiFore:
     GREY    = 30
@@ -494,13 +518,16 @@ def _printWithColor(s, color, file):
 
 
 if __name__ == "__main__":
-    USE_ANSI = True
+    AnsiCodes.init(True)
 
     def checkCode(c):
-        return c[0] != '_' and "RESET" not in c
+        return (c[0] != '_' and
+                "RESET" not in c and
+                c[0] == c[0].upper()
+               )
 
     for bg_name, bg_code in ((c, getattr(Back, c))
-                        for c in dir(Back) if checkCode(c)):
+                             for c in dir(Back) if checkCode(c)):
         sys.stdout.write('%s%-7s%s %s ' %
                          (bg_code, bg_name, Back.RESET, bg_code))
         for fg_name, fg_code in ((c, getattr(Fore, c))

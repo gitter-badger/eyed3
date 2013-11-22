@@ -19,7 +19,7 @@
 ################################################################################
 import sys as _sys
 from .. import LOCAL_ENCODING
-from .console import printError
+from .console import Fore as fg
 
 DISABLE_PROMPT = None
 '''Whenever a prompt occurs and this value is not ``None`` it can be ``exit``
@@ -60,10 +60,11 @@ def prompt(msg, default=None, required=True, type_=unicode, choices=None):
     while resp is None:
 
         resp = raw_input(msg).decode(LOCAL_ENCODING)
-        if not resp:
+
+        if not resp and default not in (None, ""):
             resp = str(default)
 
-        if resp is not None:
+        if resp:
             if yes_no_prompt:
                 resp = True if resp.lower() in BOOL_TRUE_RESPONSES else False
             else:
@@ -71,13 +72,13 @@ def prompt(msg, default=None, required=True, type_=unicode, choices=None):
                 try:
                     resp = type_(resp)
                 except Exception as ex:
-                    printError(str(ex))
+                    print(fg.red(str(ex)))
                     resp = None
         elif not required:
             return None
 
         if choices and resp not in choices:
-            printError("Response must be one of %s" % str(choices))
+            print(fg.red("Invalid response, choose from: ") + str(choices))
             resp = None
 
     return resp
