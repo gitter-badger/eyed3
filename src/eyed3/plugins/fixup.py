@@ -488,14 +488,14 @@ Album types:
                     dir_format = LIVE_DNAME_FORMAT
                 else:
                     dir_format = NORMAL_DNAME_FORMAT
-                template = TagTemplate(dir_format,
-                                       dotted_dates=self.args.dotted_dates)
+            template = TagTemplate(dir_format,
+                                   dotted_dates=self.args.dotted_dates)
 
-                pref_dir = template.substitute(audio_files[0].tag, zeropad=True)
-                if os.path.basename(directory) != pref_dir:
-                    new_dir = os.path.join(os.path.dirname(directory), pref_dir)
-                    printMsg("Rename directory to %s" % new_dir)
-                    dir_rename = (directory, new_dir)
+            pref_dir = template.substitute(audio_files[0].tag, zeropad=True)
+            if os.path.basename(directory) != pref_dir:
+                new_dir = os.path.join(os.path.dirname(directory), pref_dir)
+                printMsg("Rename directory to %s" % new_dir)
+                dir_rename = (directory, new_dir)
 
         if not self.args.dry_run:
             confirmed = False
@@ -522,7 +522,9 @@ Album types:
 
 
 def _getTemplateKeys():
-    keys = list(id3.TagTemplate("")._makeMapping(None, False).keys())
+    from eyed3.id3.tag import TagTemplate
+
+    keys = list(TagTemplate("")._makeMapping(None, False).keys())
     keys.sort()
     return ", ".join(["$%s" % v for v in keys])
 
