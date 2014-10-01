@@ -20,6 +20,7 @@
 '''
 Compatibility for various versions of Python (e.g. 2.6, 2.7, and 3.3)
 '''
+import os
 import sys
 import types
 
@@ -107,6 +108,22 @@ def byteOrd(bite):
     else:
         assert(isinstance(bite, int))
         return bite
+
+
+def importmod(mod_file):
+    '''Imports a Ptyhon module referenced by absolute or relative path
+    ``mod_file``. The module is retured.'''
+    mod_name = os.path.splitext(os.path.basename(mod_file))[0]
+
+    if PY2:
+        import imp
+        mod = imp.load_source(mod_name, mod_file)
+    else:
+        import importlib.machinery
+        loader = importlib.machinery.SourceFileLoader(mod_name, mod_file)
+        mod = loader.load_module()
+
+    return mod
 
 
 class UnicodeMixin(object):
