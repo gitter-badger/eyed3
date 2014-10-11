@@ -21,6 +21,7 @@ from __future__ import print_function
 import os
 import sys
 import textwrap
+import warnings
 
 import eyed3
 import eyed3.utils
@@ -28,11 +29,6 @@ import eyed3.utils.console
 import eyed3.plugins
 import eyed3.info
 from eyed3.compat import ConfigParser, ConfigParserError, StringIO
-
-try:
-    import ipdb as pdb
-except ImportError:
-    import pdb
 
 
 DEFAULT_PLUGIN = "classic"
@@ -292,6 +288,15 @@ if __name__ == "__main__":  # pragma: no cover
         eyed3.log.exception(ex)
 
         if args.debug_pdb:
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", PendingDeprecationWarning)
+                    # Must delay the import of ipdb as say as possible because
+                    # of https://github.com/gotcha/ipdb/issues/48
+                    import ipdb as pdb
+            except ImportError:
+                import pdb
+
             e, m, tb = sys.exc_info()
             pdb.post_mortem(tb)
     finally:
