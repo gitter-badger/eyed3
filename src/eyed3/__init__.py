@@ -93,8 +93,3 @@ from .core import load
 
 del sys
 del locale
-
-import warnings
-warnings.simplefilter("once")
-del warnings
-
