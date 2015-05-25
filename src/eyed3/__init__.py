@@ -18,19 +18,7 @@
 '''Top-level module.'''
 import sys
 import locale
-import warnings
-
-from .compat import StringTypes, PY2
-
-warnings.simplefilter("once")
-
-# FIXME: temporary
-'''
-if PY2:
-    import unicodenazi
-else:
-    warnings.simplefilter("error")
-'''
+from .compat import StringTypes
 
 
 _DEFAULT_ENCODING = "latin1"
@@ -105,4 +93,3 @@ from .core import load
 
 del sys
 del locale
-
