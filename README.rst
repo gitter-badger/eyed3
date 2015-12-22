@@ -1,5 +1,9 @@
 Status
 ======
+
+.. image:: https://badges.gitter.im/nicfit/eyed3.svg
+   :alt: Join the chat at https://gitter.im/nicfit/eyed3
+   :target: https://gitter.im/nicfit/eyed3?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
 .. image:: https://drone.io/bitbucket.org/nicfit/eyed3/status.png
    :target: https://drone.io/bitbucket.org/nicfit/eyed3
 
